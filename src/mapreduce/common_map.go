@@ -1,7 +1,12 @@
 package mapreduce
 
 import (
+	"encoding/json"
+	"fmt"
 	"hash/fnv"
+	"io/ioutil"
+	"log"
+	"os"
 )
 
 func doMap(
@@ -53,6 +58,48 @@ func doMap(
 	//
 	// Your code here (Part I).
 	//
+
+	/*
+		1. Read the input file line by line.
+		2. Calculate the hash partition of the value using ihash(s) method.
+		3. Get the reduce file name using reduceName(jobName, mapTask, r) method
+		4. Write value to the reduce file
+	*/
+
+	// Read the input file, put the contents into a KeyValue array
+	inContent, err := ioutil.ReadFile(inFile)
+	if err != nil {
+		log.Fatal("doMap failed to read input file, err: ", err)
+	}
+
+	keyValues := mapF(inFile, string(inContent))
+	tasks := make([][]KeyValue, nReduce)
+
+	for i := 0; i < len(keyValues); i++ {
+		taskNo := ihash(keyValues[i].Key) % nReduce
+		tasks[taskNo] = append(tasks[taskNo], keyValues[i])
+	}
+
+	// Create the reduce file, and put the KVs with the same key into one reduce file
+	for i := 0; i < nReduce; i++ {
+		reduceFileName := reduceName(jobName, mapTask, i)
+		fmt.Printf("reduceFileName: %v\n", reduceFileName)
+		file, err := os.Create(reduceFileName)
+		if err != nil {
+			log.Fatal("doMap failed to create reduce file, err: ", err)
+		}
+
+		enc := json.NewEncoder(file)
+		for _, kv := range tasks[i] {
+			err := enc.Encode(&kv)
+			if err != nil {
+				log.Fatal("doMap failed to encode KeyValue pair, err: ", err)
+			}
+		}
+
+		file.Close()
+	}
+
 }
 
 func ihash(s string) int {
