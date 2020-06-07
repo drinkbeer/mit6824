@@ -349,3 +349,4 @@ sh test-mr.sh
 3. http://blog.csdn.net/bysui/article/details/52128221
 4. http://www.jianshu.com/p/bfb4aee7a827
 5. http://gaocegege.com/Blog/distributed%20system/ds-lab1
+6. https://github.com/double-free/MIT6.824-2018-Chinese
