@@ -258,7 +258,29 @@ Let the MapReduce can handle a single-worker failure. Failures in one worker doe
 1. Modify the `schedule()`
 
 ```go
+		go func(doTaskArgs DoTaskArgs, registerChan chan string) {
+			defer wg.Done()
 
+			for {
+				// get one worker from registerChan if available, block if worker not available
+				worker := <-registerChan
+
+				callResult := call(worker, "Worker.DoTask", doTaskArgs, nil)
+
+				// put worker back after using it
+				go func() {
+					registerChan <- worker
+				}()
+
+				if callResult == false {
+					fmt.Printf("Schedule: failed to call Worker %s DoTask in RPC\n", worker)
+				} else {
+					break
+				}
+			}
+
+			return
+		}(doTaskArgs, registerChan)
 ```
 
 ##### Testing
