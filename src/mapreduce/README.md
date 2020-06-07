@@ -287,8 +287,61 @@ Let the MapReduce can handle a single-worker failure. Failures in one worker doe
 
 ```go
 go test -run Failure
+sh test-mr.sh
 ```
 
+### Part V: Inverted index generation (optional)
+
+1. `mapF()` and `reduceF()` in `ii.go`
+
+`mapF()` slices the content of a file into <word, file_name> key/value pair, and append the pair to a `[]mapreduce.KeyValue`.
+
+```go
+func mapF(document string, value string) (res []mapreduce.KeyValue) {
+	// Your code here (Part V).
+	f := func(c rune) bool {
+		return !unicode.IsLetter(c)
+	}
+	words := strings.FieldsFunc(value, f)
+	// using a hashmap to remove duplicated words in one file
+	wordsMap := make(map[string]string, 0)
+	for _, w := range words {
+		wordsMap[w] = document
+	}
+	res = make([]mapreduce.KeyValue, 0, len(wordsMap))
+	for k, v := range wordsMap {
+		kv := mapreduce.KeyValue{k, v}
+		res = append(res, kv)
+	}
+	return res
+}
+```
+
+`reduceF()` processes the values array of a specified key string. It will concatenate the files names with `,`, and output the big string.
+```go
+func reduceF(key string, values []string) string {
+	// Your code here (Part V).
+	nDocument := len(values)
+	sort.Strings(values)
+	var buf bytes.Buffer
+	buf.WriteString(strconv.Itoa(len(values)))
+	buf.WriteRune(' ')
+	for i, document := range values {
+		buf.WriteString(document)
+		if (i != nDocument - 1) {
+			buf.WriteRune(',')
+		}
+	}
+	return buf.String()
+}
+```
+
+
+##### Testing
+```go
+./test-ii.sh
+sh test-mr.sh
+```
 
 #### Reference
 1. [Lab 1: MapReduce](https://pdos.csail.mit.edu/6.824/labs/lab-mr.html)
