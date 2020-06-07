@@ -50,21 +50,26 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 			NumOtherPhase: nother}
 		wg.Add(1)
 		go func(doTaskArgs DoTaskArgs, registerChan chan string) {
-			// get one worker from registerChan if available, block if worker not available
-			worker := <-registerChan
+			defer wg.Done()
 
-			callResult := call(worker, "Worker.DoTask", doTaskArgs, nil)
+			for {
+				// get one worker from registerChan if available, block if worker not available
+				worker := <-registerChan
 
-			if callResult == false {
-				fmt.Printf("Schedule: failed to call Worker %s DoTask in RPC\n", worker)
+				callResult := call(worker, "Worker.DoTask", doTaskArgs, nil)
+
+				// put worker back after using it
+				go func() {
+					registerChan <- worker
+				}()
+
+				if callResult == false {
+					fmt.Printf("Schedule: failed to call Worker %s DoTask in RPC\n", worker)
+				} else {
+					break
+				}
 			}
 
-			// put worker back after using it
-			go func() {
-				registerChan <- worker
-			}()
-
-			wg.Done()
 			return
 		}(doTaskArgs, registerChan)
 	}

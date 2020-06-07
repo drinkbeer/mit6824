@@ -65,6 +65,7 @@ func doReduce(
 		if err != nil {
 			log.Fatal("doReduce failed to open, err: ", err)
 		}
+		defer reduceFile.Close()
 
 		dec := json.NewDecoder(reduceFile)
 		for {
@@ -75,7 +76,6 @@ func doReduce(
 			}
 			kvs[kv.Key] = append(kvs[kv.Key], kv.Value)
 		}
-		reduceFile.Close()
 	}
 
 	// Encode KV pairs to output file
@@ -83,6 +83,7 @@ func doReduce(
 	if err != nil {
 		log.Fatal("doReduce failed to create output file, err: ", err)
 	}
+	defer file.Close()
 	enc := json.NewEncoder(file)
 	for k, v := range kvs {
 		enc.Encode(KeyValue{k, reduceF(k, v)})

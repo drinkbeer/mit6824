@@ -88,6 +88,7 @@ func doMap(
 		if err != nil {
 			log.Fatal("doMap failed to create reduce file, err: ", err)
 		}
+		defer file.Close()
 
 		enc := json.NewEncoder(file)
 		for _, kv := range tasks[i] {
@@ -96,10 +97,7 @@ func doMap(
 				log.Fatal("doMap failed to encode KeyValue pair, err: ", err)
 			}
 		}
-
-		file.Close()
 	}
-
 }
 
 func ihash(s string) int {
