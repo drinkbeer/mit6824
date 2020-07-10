@@ -116,6 +116,14 @@ The big goal: abstractions that hide the complexity of distribution. A couple of
     and passes each key + values to a Reduce call
 * final output is set of <k2,v3> pairs from Reduce()s
 
+Example: word count
+* input is thousands of text files
+* Map(k, v)
+    * split v into words
+    * for each word w
+        * emit (w, "1")
+* Reduce(k, v)
+    * emit(len(v))
 
 
 
