@@ -125,6 +125,130 @@ Example: word count
 * Reduce(k, v)
     * emit(len(v))
 
+MapReduce scales well, because:
+1. N "work" computers get you Nx throughput.
+    * Maps()s can run in parallel, since they don't interact. Same fore Reduce()s.
+2. So you can get more throughput by buying more computers.
+
+MapReduce hides many detials:
+1. Sending app code to servers
+2. Tracking which tasks are done
+3. Moving data from Maps to Reduces
+4. Balancing load over servers
+5. Recovering from failures
+
+However, MapReduce limits what apps can do:
+* No interaction or state (other than via intermedia output).
+* No interaction, no multi-state pipelines.
+* No real-time or streaming processing.
+
+Input and output are stored on the GFS cluster file system
+* MR needs huge parallel input and output throughput.
+* GFS splits files over many servers, in 64 MB chunks.
+    * Maps read in parallel
+    * Reduces wrte in parallel
+* GFS also replicates each file on 2 or 3 servers
+* Having GFS is a big win for MapReduce
+
+What will likely limit the performance?
+1. We care since that's the thing to optimize? CPU? Memory? Disk? Network?
+2. In 2004 authors were limited by network capacity.
+    * What does MR send over the network?
+        + Maps read input from GFS. (then Map writes to Map local disk)
+        + Reduces read Map output (from Map local disk).
+            + Can be as large as input, e.g. for sorting.
+        + Reduces write output files to GFS.
+    * See [diagram: servers, tree of network switches]
+    * In MR's all-to-all shuffle, half of traffic goes through root switch.
+    * Paper's root switch:
+        + 100 to 200 gigabits/second, total 1800 machines, so 55 megabits/second/machine.
+        + 55 is small, e.g. much less thank disk or RAM speed.
+3. Today: networks and root switches are much faster relative to CPU/disk.
+    
+Some details (paper's Figure 1):
+One master, that hands out tasks to workers and remembers progress.
+1. master 
+    + gives Map tasks to workers until all Maps complete
+    + Maps write output (intermediate data) to local disk
+    + Maps split output, by hash, into one file per Reduce task
+2. after all Maps have finished, master hands out Reduce tasks
+    + each Reduce fetches its intermediate output from (all) Map workers
+    + each Reduce task writes a separate output file on GFS
+
+How does MR minimize network use?
+* Master tries to run each Map task on GFS server that stores its input.
+    * All computers run both GFS and MR workers
+    * So input is read from **local disk** (via GFS), not over network.
+* Intermediate data goes over network just once:
+    * Map worker writes to local disk
+    * Reduce workers read directly from Map workers, not via GFS.
+* Intermediate data partitioned into files holding many keys.
+    * R is much smaller than the number of keys.
+    * Big network transfers are more efficient.
+
+How does MR get good load balance?
+* Wasterful and slow if N-1 servers have to wait for 1 slow server to finish.
+* But some tasks likely take longer than others.
+* Solution: many more tasks than workers.
+    * Master hands out new tasks to workers who finish previous tasks.
+    * So no task is so big it dominates completion time (hopefully).
+    * So faster servers do more tasks than slower ones, finish abt the same times.
+
+What about fault tolerance?
+* I.e. what if a worker crashes during a MR job?
+* We want to completely hide failures from the application programmer!
+* Does MR have to re-run the whole job from the beginning? Why not?
+* MR re-runs just the failed Map()s and Reduce()s.
+    * Suppose MR runs a Map twice, one Reduce sees first run's output, another Reduce sees the second run's output?
+    * Correctness requires re-execution to yield exactlyl the same output. So Map and Reduce must be pure deterministic functions:
+        * they are only allowed to look at their arguments.
+        * no state, no file I/O, no interaction, no external communication.
+* What if you want to allow non-functional Map or Reduce?
+    * Worker failure would require whole job to be re-executed, or you'd need to create synchronized global checkpoints.
+
+Details of worker crash recovery:
+* Map worker crashes:
+    * master notices worker no longer responds to pings
+    * master knows which Map tasks it ran on that worker
+        * those tasks' intermediate output is now lost, must be re-created
+        * master tells other workers to run those tasks
+    * can omit re-running if Reduces already fetched the intermediate data
+* Reduce worker crashes:
+    * finished tasks are OK -- stored in GFS, with replicas.
+    * master re-starts worker's unfinished tasks on other workers.
+
+Other failures/problems:
+* What if the master gives two workers the same Map() tasks?
+    * perhaps the master incorrectly thinks one worker died.
+    * it will tell Reduce workers about only one of them.
+* What if the master gives two workers the same Reduce() tasks?
+    * they will both try to write the same output file on GFS!
+    * atomic GFS rename prevents mixing; one complete file will be visible.
+* What if a single worker is very slow -- a "straggler"?
+    * perhaps due to flakey hardware.
+    * master stasrts a second copy of last few tasks.
+* What if a worker computes incorrect output, due to broken h/w or s/w?
+    * too bad! MR assumes "fail-stop" CPUs and software. No actions are taken to check the integrity of the output.
+* What if master crashes?
+    * no way to prevent it, has to do manually restart the master, or should have backup master to catch up the jobs
+
+Current status?
+* Hugely influential (Hadoop, Spark, etc).
+* Probably no longer in use at Google.
+    * Replaced by Flume / FlumeJava (see paper by Chamblers).
+    * GFS is replaced by Colossus (no good description), and BigTable.
+
+Conclusion:
+1. MapReduce single-handedly made big cluster computation popular.
+* \- Not the most efficient or flexible.
+* \+ Scales well.
+* \+ Easy to program - failures and data movement are hidden.
+
+There were good trade-offs in practice. We will see some more advanced successors later in the course.
+
+    
+
+
 
 
 ### Reference
