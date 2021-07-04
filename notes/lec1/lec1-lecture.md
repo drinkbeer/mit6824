@@ -1,4 +1,4 @@
-## Notes for Lec1
+# Notes for Lec1
 
 ## COURSE STRUCTURE
 
