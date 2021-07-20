@@ -14,6 +14,9 @@ Server State:
 ## Lab2A
 
 ---
+#### 
+
+#### Run Test
 `go test -run 2A`
 
 ## Lab2B
