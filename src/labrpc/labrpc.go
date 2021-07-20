@@ -78,7 +78,7 @@ type ClientEnd struct {
 	done    chan struct{} // closed when Network is cleaned up
 }
 
-// send an RPC, wait for the reply.
+// Call send an RPC, wait for the reply.
 // the return value indicates success; false means that
 // no reply was received from the server.
 func (e *ClientEnd) Call(svcMeth string, args interface{}, reply interface{}) bool {
@@ -295,7 +295,7 @@ func (rn *Network) ProcessReq(req reqMsg) {
 
 }
 
-// create a client end-point.
+// MakeEnd create a client end-point.
 // start the thread that listens and delivers.
 func (rn *Network) MakeEnd(endname interface{}) *ClientEnd {
 	rn.mu.Lock()
