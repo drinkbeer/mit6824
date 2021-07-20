@@ -64,7 +64,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// 2B
 
 	// 2A
-	// vote for the candidate in the RequestVoteArgs
+	// vote to the candidate in the RequestVoteArgs
 	rf.votedFor = args.CandidateId
 	reply.Term = rf.currentTerm // rely currentTerm so the peer who RequestVote knows their term is lower or higher than me
 	reply.VoteGranted = true
