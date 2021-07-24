@@ -20,8 +20,8 @@ type AppendEntriesReply struct {
 	Success bool // 2A
 
 	// OPTIMIZE: see thesis section 5.3
-	ConflictTerm  int // 2C
-	ConflictIndex int // 2C
+	//ConflictTerm  int // 2C
+	//ConflictIndex int // 2C
 }
 
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
@@ -66,10 +66,10 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	if absoluteLastLogIndex < args.PrevLogIndex {
 		reply.Success = false
 		reply.Term = rf.currentTerm
-		// optimistically thinks receiver's log matches with Leader's as a subset
-		reply.ConflictIndex = absoluteLastLogIndex + 1
-		// no conflict term
-		reply.ConflictTerm = -1
+		//// optimistically thinks receiver's log matches with Leader's as a subset
+		//reply.ConflictIndex = absoluteLastLogIndex + 1
+		//// no conflict term
+		//reply.ConflictTerm = -1
 		return
 	}
 
@@ -77,7 +77,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		reply.Success = false
 		reply.Term = rf.currentTerm
 		// receiver's log in certain term unmatches Leader's log
-		reply.ConflictTerm = rf.logs[rf.getRelativeLogIndex(args.PrevLogIndex)].Term
+		//reply.ConflictTerm = rf.logs[rf.getRelativeLogIndex(args.PrevLogIndex)].Term
 
 		// expecting Leader to check the former term
 		// so set ConflictIndex to the first one of entries in ConflictTerm
