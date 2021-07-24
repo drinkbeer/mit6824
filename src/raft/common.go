@@ -16,7 +16,7 @@ const (
 )
 
 // debugEnabled tells if debugging enabled
-const debugEnabled = true
+const debugEnabled = false
 
 func Debug(format string, a ...interface{}) (n int, err error) {
 	if debugEnabled {
