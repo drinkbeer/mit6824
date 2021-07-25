@@ -52,21 +52,25 @@ type Raft struct {
 	mu        sync.Mutex          // Lock to protect shared access to this peer's state
 	peers     []*labrpc.ClientEnd // RPC end points of all peers
 	persister *Persister          // Object to hold this peer's persisted state
-	me        int                 // this peer's index into peers[]
+	me        int                 // This peer's index into peers[]
 
 	// Your data here (2A, 2B, 2C).
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
 
-	// 2A
-	// from Figure 2
-
-	// Persistent state on all servers:
-	currentTerm    int
-	votedFor       int
+	// 2A, from Figure 2
+	currentTerm    int // Latest term server has seen
+	votedFor       int // CandidateId that received vote in current term
 	electionTimer  *time.Timer
 	heartbeatTimer *time.Timer
-	state          NodeState
+	state          NodeState // State of server
+	// 2B, from Figure 2
+	logs        []LogEntry // Each entry contains command for state machine, and term when entry was received by leader (term starts from 1)
+	applyCh     chan ApplyMsg
+	commitIndex int   // Index of highest log entry known to be committed
+	lastApplied int   // Index of highest log entry applied to state machine
+	nextIndex   []int // For each server, index of the next log entry to send to that server
+	matchIndex  []int // For each server, index of highest log entry known to be replicated on server
 }
 
 // GetState return currentTerm and whether this server
@@ -103,6 +107,17 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	isLeader := true
 
 	// Your code here (2B).
+	term, isLeader = rf.GetState()
+	if isLeader {
+		rf.mu.Lock()
+		rf.logs = append(rf.logs, LogEntry{Command: command, Term: term})
+		index = len(rf.logs) - 1 // index that the command appears at in leader's log
+		rf.matchIndex[rf.me] = index
+		rf.nextIndex[rf.me] = index + 1
+		// start agreement now
+		rf.broadcastHeartbeat()
+		rf.mu.Unlock()
+	}
 
 	return index, term, isLeader
 }
@@ -138,6 +153,14 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 	rf.electionTimer = time.NewTimer(RandomDuration(ElectionTimeoutLower, ElectionTimeoutUpper))
 	rf.state = Follower
 	// 2B
+	rf.logs = make([]LogEntry, 1)
+	rf.applyCh = applyCh
+	rf.nextIndex = make([]int, len(rf.peers))
+	for i := range rf.nextIndex {
+		// initialized to leader last log index + 1
+		rf.nextIndex[i] = len(rf.logs)
+	}
+	rf.matchIndex = make([]int, len(rf.peers))
 	// 2C
 
 	// initialize from state persisted before a crash
@@ -165,7 +188,7 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 				if node.state == Leader {
 					Debug("HeartbeatTimer elapsed: Leader broadcasts Heartbeat \n")
 					node.broadcastHeartbeat()
-					node.heartbeatTimer.Reset(HeartbeatInterval)
+					ResetTimer(node.heartbeatTimer, HeartbeatInterval)
 				}
 				node.mu.Unlock()
 			}

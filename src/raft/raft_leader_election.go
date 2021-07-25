@@ -18,7 +18,7 @@ func (rf *Raft) convertTo(s NodeState) {
 		rf.startElection()
 	case Leader:
 		rf.electionTimer.Stop()
-		//rf.broadcastHeartbeat()
+		rf.broadcastHeartbeat()
 		ResetTimer(rf.heartbeatTimer, HeartbeatInterval)
 	}
 	Debug("Term %d: me %d convert from %v to %v \n", rf.currentTerm, rf.me, rf.state, s)
@@ -29,10 +29,12 @@ func (rf *Raft) convertTo(s NodeState) {
 // Your data here (2A, 2B).
 type RequestVoteArgs struct {
 	// 2A
-	Term        int
-	CandidateId int
+	Term        int // Candidate's term
+	CandidateId int // Candidate's Id (who is requesting vote)
 
 	// 2B
+	LastLogIndex int // Index of candidate's last log entry
+	LastLogTerm  int // Term of candidate's last log entry
 }
 
 // RequestVoteReply example RequestVote RPC reply structure.
@@ -40,8 +42,8 @@ type RequestVoteArgs struct {
 // Your data here (2A).
 type RequestVoteReply struct {
 	// 2A
-	Term        int
-	VoteGranted bool
+	Term        int  // Candidate's current term
+	VoteGranted bool // true means candidate received vote
 }
 
 // RequestVote RPC handler.
@@ -61,7 +63,15 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		rf.convertTo(Follower)
 	}
 
-	// 2B
+	// 2B: candidate's vote should be at least up-to-date as receiver's log
+	// "up-to-date" is defined in thesis 5.4.1
+	lastLogIndex := len(rf.logs) - 1
+	if args.LastLogTerm < rf.logs[lastLogIndex].Term || (args.LastLogTerm == rf.logs[lastLogIndex].Term && args.LastLogIndex < lastLogIndex) {
+		// Receiver is more up-to-date, does not grant vote
+		reply.Term = rf.currentTerm
+		reply.VoteGranted = false
+		return
+	}
 
 	// 2A
 	// vote to the candidate in the RequestVoteArgs
@@ -72,7 +82,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	Debug("RequestVote - me %v term %v voted for candidate %v term %v \n", rf.me, rf.currentTerm, args.CandidateId, args.Term)
 }
 
-// startElection starts to send RequestVote RPC to peers, and count the votes.
+// startElection starts to send RequestVote RPC to peers, and count the votes on conversion to candidate.
 func (rf *Raft) startElection() {
 	// 2A
 	rf.currentTerm += 1
@@ -81,6 +91,9 @@ func (rf *Raft) startElection() {
 		Term:        rf.currentTerm,
 		CandidateId: rf.me,
 	}
+
+	// startElection is called on conversion to candidate, and election timer is reset before calling startElection.
+	//ResetTimer(rf.electionTimer, RandomDuration(ElectionTimeoutLower, ElectionTimeoutUpper))
 
 	var voteCount int32
 
