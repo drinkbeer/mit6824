@@ -87,9 +87,12 @@ func (rf *Raft) startElection() {
 	// 2A
 	rf.currentTerm += 1
 
+	lastLogIndex := len(rf.logs) - 1
 	args := RequestVoteArgs{
 		Term:        rf.currentTerm,
 		CandidateId: rf.me,
+		LastLogIndex: rf.getAbsoluteLogIndex(rf.lastApplied),
+		LastLogTerm: rf.logs[lastLogIndex].Term,
 	}
 
 	// startElection is called on conversion to candidate, and election timer is reset before calling startElection.
