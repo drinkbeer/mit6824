@@ -1,6 +1,7 @@
 package raft
 
 import (
+	"labrpc"
 	"sync"
 	"time"
 )
@@ -21,10 +22,6 @@ ApplyMsg
   should send an ApplyMsg to the service (or tester)
   in the same server.
 */
-
-import (
-	"labrpc"
-)
 
 const (
 	HeartbeatInterval    = time.Duration(120) * time.Millisecond
