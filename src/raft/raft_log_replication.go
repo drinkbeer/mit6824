@@ -60,6 +60,12 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	// entries before args.PrevLogIndex might be unmatch
 	// return false and ask Leader to decrement PrevLogIndex
+	/*
+		- - - - - -
+		          ^
+				  |
+				  absoluteLastLogIndex = 5
+	*/
 	absoluteLastLogIndex := rf.getAbsoluteLogIndex(len(rf.logs) - 1)
 	if absoluteLastLogIndex < args.PrevLogIndex {
 		reply.Success = false
@@ -96,9 +102,38 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	}
 
 	// compare from rf.logs[args.PrevLogIndex + 1]
+	/*
+		Ideally:
+			- - - - - -
+			          ^
+					  |
+					  len(rf.logs)-1
+
+			- - - - - - - - -
+					^ ^
+					| |
+					args.PrevLogIndex
+					  |
+					  entry starts
+
+		Sometimes:
+		    - - - - - -
+			          ^
+					  |
+					  len(rf.logs)-1
+
+			- - - - - - - - -
+				^ ^     ^
+				| |     |
+				args.PrevLogIndex
+				  |     |
+				  entry starts
+				        |
+						unmatch_idx (copy should start here)
+	*/
 	unmatch_idx := -1
 	for idx := range args.Entries {
-		if len(rf.logs) < rf.getRelativeLogIndex(args.PrevLogIndex+2+idx) ||
+		if len(rf.logs)-1 < rf.getRelativeLogIndex(args.PrevLogIndex+1+idx) ||
 			rf.logs[rf.getRelativeLogIndex(args.PrevLogIndex+1+idx)].Term != args.Entries[idx].Term {
 			// unmatch log found
 			unmatch_idx = idx
@@ -206,17 +241,6 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 func (rf *Raft) setCommitIndex(commitIndex int) {
 	rf.commitIndex = commitIndex
 
-	//if rf.commitIndex > rf.lastApplied {
-	//	var msg ApplyMsg
-	//	msg.CommandValid = true
-	//	msg.CommandIndex = rf.commitIndex
-	//	msg.Command = rf.logs[rf.commitIndex]
-	//	rf.applyCh <- msg
-	//	rf.mu.Lock()
-	//	rf.lastApplied = rf.commitIndex
-	//	rf.mu.Unlock()
-	//}
-
 	if rf.commitIndex > rf.lastApplied {
 		Debug("%v apply from index %d to %d \n", rf.me, rf.lastApplied+1, rf.commitIndex)
 		entriesToApply := append([]LogEntry{},
@@ -250,4 +274,3 @@ func (rf *Raft) getAbsoluteLogIndex(index int) int {
 	// index of log including snapshotted ones
 	return index
 }
-
