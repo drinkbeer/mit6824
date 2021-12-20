@@ -2,6 +2,8 @@ package raft
 
 import (
 	"labrpc"
+	"log"
+	"math/rand"
 	"sync"
 	"time"
 )
@@ -49,25 +51,23 @@ type Raft struct {
 	mu        sync.Mutex          // Lock to protect shared access to this peer's state
 	peers     []*labrpc.ClientEnd // RPC end points of all peers
 	persister *Persister          // Object to hold this peer's persisted state
-	me        int                 // This peer's index into peers[]
+	me        int                 // this peer's index into peers[]
 
 	// Your data here (2A, 2B, 2C).
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
+	currentTerm    int         // 2A
+	votedFor       int         // 2A
+	electionTimer  *time.Timer // 2A
+	heartbeatTimer *time.Timer // 2A
+	state          NodeState   // 2A
 
-	// 2A, from Figure 2
-	currentTerm    int // Latest term server has seen
-	votedFor       int // CandidateId that received vote in current term
-	electionTimer  *time.Timer
-	heartbeatTimer *time.Timer
-	state          NodeState // State of server
-	// 2B, from Figure 2
-	logs        []LogEntry // Each entry contains command for state machine, and term when entry was received by leader (term starts from 1)
-	applyCh     chan ApplyMsg
-	commitIndex int   // Index of highest log entry known to be committed
-	lastApplied int   // Index of highest log entry applied to state machine
-	nextIndex   []int // For each server, index of the next log entry to send to that server
-	matchIndex  []int // For each server, index of highest log entry known to be replicated on server
+	logs        []LogEntry    // 2B
+	commitIndex int           // 2B
+	lastApplied int           // 2B
+	nextIndex   []int         // 2B
+	matchIndex  []int         // 2B
+	applyCh     chan ApplyMsg // 2B
 }
 
 // GetState return currentTerm and whether this server
@@ -75,14 +75,11 @@ type Raft struct {
 func (rf *Raft) GetState() (int, bool) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-
 	var term int
 	var isleader bool
-
 	// Your code here (2A).
 	term = rf.currentTerm
 	isleader = rf.state == Leader
-
 	return term, isleader
 }
 
@@ -107,13 +104,11 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	term, isLeader = rf.GetState()
 	if isLeader {
 		rf.mu.Lock()
+		index = len(rf.logs)
 		rf.logs = append(rf.logs, LogEntry{Command: command, Term: term})
-		index = len(rf.logs) // index that the command appears at in leader's log
 		rf.matchIndex[rf.me] = index
 		rf.nextIndex[rf.me] = index + 1
-		rf.persist() // 2C
-		// start agreement now
-		// rf.broadcastHeartbeat()
+		rf.persist()
 		rf.mu.Unlock()
 	}
 
@@ -137,44 +132,36 @@ func (rf *Raft) Kill() {
 // tester or service expects Raft to send ApplyMsg messages.
 // Make() must return quickly, so it should start goroutines
 // for any long-running work.
-func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan ApplyMsg) *Raft {
+func Make(peers []*labrpc.ClientEnd, me int,
+	persister *Persister, applyCh chan ApplyMsg) *Raft {
 	rf := &Raft{}
 	rf.peers = peers
 	rf.persister = persister
 	rf.me = me
 
 	// Your initialization code here (2A, 2B, 2C).
-	// 2A
 	rf.currentTerm = 0
-	rf.votedFor = -1
+	rf.votedFor = -1 // voted for no one
 	rf.heartbeatTimer = time.NewTimer(HeartbeatInterval)
-	rf.electionTimer = time.NewTimer(RandomDuration(ElectionTimeoutLower, ElectionTimeoutUpper))
+	rf.electionTimer = time.NewTimer(randTimeDuration(ElectionTimeoutLower, ElectionTimeoutUpper))
 	rf.state = Follower
-	// 2B
-	rf.logs = make([]LogEntry, 1)
+
 	rf.applyCh = applyCh
+	rf.logs = make([]LogEntry, 1) // start from index 1
 	rf.nextIndex = make([]int, len(rf.peers))
 	for i := range rf.nextIndex {
 		// initialized to leader last log index + 1
 		rf.nextIndex[i] = len(rf.logs)
 	}
 	rf.matchIndex = make([]int, len(rf.peers))
-	// 2C
-
-	// initialize from state persisted before a crash
-	// 2C
-	rf.mu.Lock()
-	rf.readPersist(persister.ReadRaftState())
-	rf.mu.Unlock()
 
 	go func(node *Raft) {
 		for {
 			select {
-			case <-node.electionTimer.C:
+			case <-rf.electionTimer.C:
 				rf.mu.Lock()
-				// electionTimer has elapsed, no need to call Stop()
-				ResetTimer(node.electionTimer, RandomDuration(ElectionTimeoutLower, ElectionTimeoutUpper))
 				if rf.state == Follower {
+					// rf.startElection() is called in conversion to Candidate
 					rf.convertTo(Candidate)
 				} else {
 					rf.startElection()
@@ -183,15 +170,34 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 
 			case <-rf.heartbeatTimer.C:
 				rf.mu.Lock()
-				if node.state == Leader {
-					Debug("HeartbeatTimer elapsed: Leader broadcasts Heartbeat \n")
+				if rf.state == Leader {
 					rf.broadcastHeartbeat()
-					ResetTimer(node.heartbeatTimer, HeartbeatInterval)
+					rf.heartbeatTimer.Reset(HeartbeatInterval)
 				}
 				rf.mu.Unlock()
 			}
 		}
 	}(rf)
 
+	// initialize from state persisted before a crash
+	rf.mu.Lock()
+	rf.readPersist(persister.ReadRaftState())
+	rf.mu.Unlock()
+
 	return rf
+}
+
+func randTimeDuration(lower, upper time.Duration) time.Duration {
+	num := rand.Int63n(upper.Nanoseconds()-lower.Nanoseconds()) + lower.Nanoseconds()
+	return time.Duration(num) * time.Nanosecond
+}
+
+// Debugging
+const DebugNum = 0
+
+func DPrintf(format string, a ...interface{}) (n int, err error) {
+	if DebugNum > 0 {
+		log.Printf(format, a...)
+	}
+	return
 }

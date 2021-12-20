@@ -7,52 +7,52 @@ func (rf *Raft) convertTo(s NodeState) {
 	if s == rf.state {
 		return
 	}
-
+	DPrintf("Term %d: server %d convert from %v to %v\n",
+		rf.currentTerm, rf.me, rf.state, s)
 	rf.state = s
 	switch s {
 	case Follower:
 		rf.heartbeatTimer.Stop()
-		ResetTimer(rf.electionTimer, RandomDuration(ElectionTimeoutLower, ElectionTimeoutUpper))
+		rf.electionTimer.Reset(randTimeDuration(ElectionTimeoutLower, ElectionTimeoutUpper))
 		rf.votedFor = -1
+
 	case Candidate:
 		rf.startElection()
+
 	case Leader:
 		for i := range rf.nextIndex {
-			// initialize nextIndex to leader last log index + 1
+			// initialized to leader last log index + 1
 			rf.nextIndex[i] = len(rf.logs)
 		}
-
 		for i := range rf.matchIndex {
 			rf.matchIndex[i] = 0
 		}
 
 		rf.electionTimer.Stop()
 		rf.broadcastHeartbeat()
-		ResetTimer(rf.heartbeatTimer, HeartbeatInterval)
+		rf.heartbeatTimer.Reset(HeartbeatInterval)
 	}
-	Debug("Term %d: me %d convert from %v to %v \n", rf.currentTerm, rf.me, rf.state, s)
 }
 
 // RequestVoteArgs example RequestVote RPC arguments structure.
 // field names must start with capital letters!
 // Your data here (2A, 2B).
 type RequestVoteArgs struct {
-	// 2A
-	Term        int // Candidate's term
-	CandidateId int // Candidate's Id (who is requesting vote)
+	// Your data here (2A, 2B).
+	Term        int // 2A
+	CandidateId int // 2A
 
-	// 2B
-	LastLogIndex int // Index of candidate's last log entry
-	LastLogTerm  int // Term of candidate's last log entry
+	LastLogIndex int // 2B
+	LastLogTerm  int // 2B
 }
 
 // RequestVoteReply example RequestVote RPC reply structure.
 // field names must start with capital letters!
 // Your data here (2A).
 type RequestVoteReply struct {
-	// 2A
-	Term        int  // Candidate's current term
-	VoteGranted bool // true means candidate received vote
+	// Your data here (2A).
+	Term        int  // 2A
+	VoteGranted bool // 2A
 }
 
 // RequestVote RPC handler.
@@ -60,9 +60,10 @@ type RequestVoteReply struct {
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-	defer rf.persist() // 2C execute before rf.mu.Unlock()
-	// 2A
-	if args.Term < rf.currentTerm || (args.Term == rf.currentTerm && rf.votedFor != -1 && rf.votedFor != args.CandidateId) {
+	defer rf.persist() // execute before rf.mu.Unlock()
+	// Your code here (2A, 2B).
+	if args.Term < rf.currentTerm ||
+		(args.Term == rf.currentTerm && rf.votedFor != -1 && rf.votedFor != args.CandidateId) {
 		reply.Term = rf.currentTerm
 		reply.VoteGranted = false
 		return
@@ -71,50 +72,46 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	if args.Term > rf.currentTerm {
 		rf.currentTerm = args.Term
 		rf.convertTo(Follower)
+		// do not return here.
 	}
 
 	// 2B: candidate's vote should be at least up-to-date as receiver's log
 	// "up-to-date" is defined in thesis 5.4.1
 	lastLogIndex := len(rf.logs) - 1
-	if args.LastLogTerm < rf.logs[lastLogIndex].Term || (args.LastLogTerm == rf.logs[lastLogIndex].Term && args.LastLogIndex < lastLogIndex) {
+	if args.LastLogTerm < rf.logs[lastLogIndex].Term ||
+		(args.LastLogTerm == rf.logs[lastLogIndex].Term && args.LastLogIndex < lastLogIndex) {
 		// Receiver is more up-to-date, does not grant vote
 		reply.Term = rf.currentTerm
 		reply.VoteGranted = false
 		return
 	}
 
-	// 2A
-	// vote to the candidate in the RequestVoteArgs
 	rf.votedFor = args.CandidateId
-	reply.Term = rf.currentTerm // rely currentTerm so the peer who RequestVote knows their term is lower or higher than me
+	reply.Term = rf.currentTerm // not used, for better logging
 	reply.VoteGranted = true
-	ResetTimer(rf.electionTimer, RandomDuration(ElectionTimeoutLower, ElectionTimeoutUpper))
-	Debug("RequestVote - me %v term %v voted for candidate %v term %v \n", rf.me, rf.currentTerm, args.CandidateId, args.Term)
+	// reset timer after grant vote
+	rf.electionTimer.Reset(randTimeDuration(ElectionTimeoutLower, ElectionTimeoutUpper))
 }
 
 // startElection starts to send RequestVote RPC to peers, and count the votes on conversion to candidate.
 func (rf *Raft) startElection() {
-	defer rf.persist() // 2C
+	defer rf.persist()
 
-	// 2A
 	rf.currentTerm += 1
-	ResetTimer(rf.electionTimer, RandomDuration(ElectionTimeoutLower, ElectionTimeoutUpper))
+	rf.electionTimer.Reset(randTimeDuration(ElectionTimeoutLower, ElectionTimeoutUpper))
 
 	lastLogIndex := len(rf.logs) - 1
 	args := RequestVoteArgs{
 		Term:         rf.currentTerm,
 		CandidateId:  rf.me,
-		LastLogIndex: rf.lastApplied,
+		LastLogIndex: lastLogIndex,
 		LastLogTerm:  rf.logs[lastLogIndex].Term,
 	}
 
-	// startElection is called on conversion to candidate, and election timer is reset before calling startElection.
-	//ResetTimer(rf.electionTimer, RandomDuration(ElectionTimeoutLower, ElectionTimeoutUpper))
-
 	var voteCount int32
 
-	for peer := range rf.peers {
-		if peer == rf.me {
+	for i := range rf.peers {
+		if i == rf.me {
 			rf.votedFor = rf.me
 			atomic.AddInt32(&voteCount, 1)
 			continue
@@ -123,23 +120,23 @@ func (rf *Raft) startElection() {
 			var reply RequestVoteReply
 			if rf.sendRequestVote(server, &args, &reply) {
 				rf.mu.Lock()
+				DPrintf("%v got RequestVote response from node %d, VoteGranted=%v, Term=%d",
+					rf, server, reply.VoteGranted, reply.Term)
 				if reply.VoteGranted && rf.state == Candidate {
-					Debug("sendRequestVote succeed, reply.VoteGranted %v, me %v state %v, state == candidate: %v \n", reply.VoteGranted, rf.me, rf.state, rf.state == Candidate)
 					atomic.AddInt32(&voteCount, 1)
 					if atomic.LoadInt32(&voteCount) > int32(len(rf.peers)/2) {
 						rf.convertTo(Leader)
-						Debug("%v got elected to Leader \n", rf.me)
 					}
 				} else {
 					if reply.Term > rf.currentTerm {
 						rf.currentTerm = reply.Term
 						rf.convertTo(Follower)
-						rf.persist() // 2C
+						rf.persist()
 					}
 				}
 				rf.mu.Unlock()
 			}
-		}(peer)
+		}(i)
 	}
 }
 
