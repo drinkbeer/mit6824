@@ -17,6 +17,15 @@ func (rf *Raft) convertTo(s NodeState) {
 	case Candidate:
 		rf.startElection()
 	case Leader:
+		for i := range rf.nextIndex {
+			// initialize nextIndex to leader last log index + 1
+			rf.nextIndex[i] = len(rf.logs)
+		}
+
+		for i := range rf.matchIndex {
+			rf.matchIndex[i] = 0
+		}
+
 		rf.electionTimer.Stop()
 		rf.broadcastHeartbeat()
 		ResetTimer(rf.heartbeatTimer, HeartbeatInterval)
@@ -89,12 +98,13 @@ func (rf *Raft) startElection() {
 
 	// 2A
 	rf.currentTerm += 1
+	ResetTimer(rf.electionTimer, RandomDuration(ElectionTimeoutLower, ElectionTimeoutUpper))
 
 	lastLogIndex := len(rf.logs) - 1
 	args := RequestVoteArgs{
 		Term:         rf.currentTerm,
 		CandidateId:  rf.me,
-		LastLogIndex: rf.getAbsoluteLogIndex(rf.lastApplied),
+		LastLogIndex: rf.lastApplied,
 		LastLogTerm:  rf.logs[lastLogIndex].Term,
 	}
 

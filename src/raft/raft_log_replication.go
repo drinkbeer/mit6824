@@ -19,6 +19,10 @@ type AppendEntriesReply struct {
 	// 2B
 	Term    int  // Follower or candidate's term, for leader to update itself
 	Success bool // True if follower or candidate contained entry matching PrevLogIndex and PrevLogTerm
+
+	// OPTIMIZE: see thesis section 5.3
+	ConflictTerm  int // 2C
+	ConflictIndex int // 2C
 }
 
 // AppendEntries RPC handler is used (1) by leader to replicate log entries; (2) used as heartbeat
@@ -66,38 +70,32 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 				  |
 				  absoluteLastLogIndex = 5
 	*/
-	absoluteLastLogIndex := rf.getAbsoluteLogIndex(len(rf.logs) - 1)
+	absoluteLastLogIndex := len(rf.logs) - 1
 	if absoluteLastLogIndex < args.PrevLogIndex {
 		reply.Success = false
 		reply.Term = rf.currentTerm
 		//// optimistically thinks receiver's log matches with Leader's as a subset
-		//reply.ConflictIndex = absoluteLastLogIndex + 1
+		reply.ConflictIndex = absoluteLastLogIndex + 1
 		//// no conflict term
-		//reply.ConflictTerm = -1
+		reply.ConflictTerm = -1
 		return
 	}
 
-	if rf.logs[rf.getRelativeLogIndex(args.PrevLogIndex)].Term != args.PrevLogTerm {
+	if rf.logs[args.PrevLogIndex].Term != args.PrevLogTerm {
 		reply.Success = false
 		reply.Term = rf.currentTerm
 		// receiver's log in certain term unmatches Leader's log
-		//reply.ConflictTerm = rf.logs[rf.getRelativeLogIndex(args.PrevLogIndex)].Term
+		reply.ConflictTerm = rf.logs[args.PrevLogIndex].Term
 
 		// expecting Leader to check the former term
 		// so set ConflictIndex to the first one of entries in ConflictTerm
-		//conflictIndex := args.PrevLogIndex
-		//// apparently, since rf.logs[0] are ensured to match among all servers
-		//// ConflictIndex must be > 0, safe to minus 1
-		//for rf.logs[rf.getRelativeLogIndex(conflictIndex-1)].Term == reply.ConflictTerm {
-		//	conflictIndex--
-		//	if conflictIndex == rf.snapshottedIndex+1 {
-		//		// this may happen after snapshot,
-		//		// because the term of the first log may be the current term
-		//		// before lab 3b this is not going to happen, since rf.logs[0].Term = 0
-		//		break
-		//	}
-		//}
-		//reply.ConflictIndex = conflictIndex
+		conflictIndex := args.PrevLogIndex
+		// apparently, since rf.logs[0] are ensured to match among all servers
+		// ConflictIndex must be > 0, safe to minus 1
+		for rf.logs[conflictIndex-1].Term == reply.ConflictTerm {
+			conflictIndex--
+		}
+		reply.ConflictIndex = conflictIndex
 		return
 	}
 
@@ -133,8 +131,8 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	*/
 	unmatch_idx := -1
 	for idx := range args.Entries {
-		if len(rf.logs)-1 < rf.getRelativeLogIndex(args.PrevLogIndex+1+idx) ||
-			rf.logs[rf.getRelativeLogIndex(args.PrevLogIndex+1+idx)].Term != args.Entries[idx].Term {
+		if len(rf.logs)-1 < args.PrevLogIndex+1+idx ||
+			rf.logs[args.PrevLogIndex+1+idx].Term != args.Entries[idx].Term {
 			// unmatch log found
 			unmatch_idx = idx
 			break
@@ -144,18 +142,18 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	if unmatch_idx != -1 {
 		// there are unmatch entries
 		// truncate unmatch Follower entries, and apply Leader entries
-		rf.logs = rf.logs[:rf.getRelativeLogIndex(args.PrevLogIndex+1+unmatch_idx)]
+		rf.logs = rf.logs[:args.PrevLogIndex+1+unmatch_idx]
 		rf.logs = append(rf.logs, args.Entries[unmatch_idx:]...)
 	}
 
 	// Leader guarantee to have all committed entries
 	// TODO: Is that possible for lastLogIndex < args.LeaderCommit?
 	if args.LeaderCommit > rf.commitIndex {
-		absoluteLastLogIndex := rf.getAbsoluteLogIndex(len(rf.logs) - 1)
-		if args.LeaderCommit <= absoluteLastLogIndex {
+		lastLogIndex := len(rf.logs) - 1
+		if args.LeaderCommit <= lastLogIndex {
 			rf.setCommitIndex(args.LeaderCommit)
 		} else {
-			rf.setCommitIndex(absoluteLastLogIndex)
+			rf.setCommitIndex(lastLogIndex)
 		}
 	}
 
@@ -193,10 +191,10 @@ func (rf *Raft) broadcastHeartbeat() {
 			var reply AppendEntriesReply
 			if rf.sendAppendEntries(server, &args, &reply) {
 				rf.mu.Lock()
-				if rf.state != Leader {
-					rf.mu.Unlock()
-					return
-				}
+				// if rf.state != Leader {
+				// 	rf.mu.Unlock()
+				// 	return
+				// }
 				if reply.Success {
 					rf.matchIndex[server] = args.PrevLogIndex + len(args.Entries)
 					rf.nextIndex[server] = rf.matchIndex[server] + 1
@@ -218,15 +216,25 @@ func (rf *Raft) broadcastHeartbeat() {
 					if reply.Term > rf.currentTerm {
 						rf.currentTerm = reply.Term
 						rf.convertTo(Follower)
-						rf.persist() // execute before rf.mu.Unlock()
+						rf.persist()
+					} else {
+						// log unmatch, update nextIndex[server] for the next trial
+						rf.nextIndex[server] = reply.ConflictIndex
+
+						// if term found, override it to
+						// the first entry after entries in ConflictTerm
+						if reply.ConflictTerm != -1 {
+							Debug("%v conflict with server %d, prevLogIndex %d, log length = %d",
+								rf, server, args.PrevLogIndex, len(rf.logs))
+							for i := args.PrevLogIndex; i >= 1; i-- {
+								if rf.logs[i-1].Term == reply.ConflictTerm {
+									// in next trial, check if log entries in ConflictTerm matches
+									rf.nextIndex[server] = i
+									break
+								}
+							}
+						}
 					}
-					//else {
-					//	// leader and follower's term in PrevLogIndex is not match, decrease PrevLogIndex by one for next retry
-					//	// Retry in next RPC call (Optimization: AppendEntries RPC call right now)
-					//	if rf.nextIndex[server] > 1 {
-					//		rf.nextIndex[server] -= 1
-					//	}
-					//}
 				}
 				rf.mu.Unlock()
 			}
@@ -257,21 +265,11 @@ func (rf *Raft) setCommitIndex(commitIndex int) {
 				// do not forget to update lastApplied index
 				// this is another goroutine, so protect it with lock
 				rf.mu.Lock()
-				if rf.lastApplied < msg.CommandIndex {
-					rf.lastApplied = msg.CommandIndex
-				}
+				// if rf.lastApplied < msg.CommandIndex {
+				rf.lastApplied = msg.CommandIndex
+				// }
 				rf.mu.Unlock()
 			}
 		}(rf.lastApplied+1, entriesToApply)
 	}
-}
-
-func (rf *Raft) getRelativeLogIndex(index int) int {
-	// index of rf.logs
-	return index
-}
-
-func (rf *Raft) getAbsoluteLogIndex(index int) int {
-	// index of log including snapshotted ones
-	return index
 }

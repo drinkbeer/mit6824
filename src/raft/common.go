@@ -10,9 +10,9 @@ import (
 type NodeState string
 
 const (
-	Follower  = "follower"
-	Candidate = "candidate"
-	Leader    = "leader"
+	Follower  = NodeState("follower")
+	Candidate = NodeState("candidate")
+	Leader    = NodeState("leader")
 )
 
 // debugEnabled tells if debugging enabled
@@ -33,11 +33,11 @@ func RandomDuration(lower, upper time.Duration) time.Duration {
 
 // ResetTimer resets the timer with the duration.
 func ResetTimer(timer *time.Timer, d time.Duration) {
-	if !timer.Stop() {
-		select {
-		case <-timer.C: // try to drain from the channel
-		default:
-		}
-	}
+	// if !timer.Stop() {
+	// 	select {
+	// 	case <-timer.C: // try to drain from the channel
+	// 	default:
+	// 	}
+	// }
 	timer.Reset(d)
 }

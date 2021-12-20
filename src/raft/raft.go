@@ -108,12 +108,12 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	if isLeader {
 		rf.mu.Lock()
 		rf.logs = append(rf.logs, LogEntry{Command: command, Term: term})
-		index = len(rf.logs) - 1 // index that the command appears at in leader's log
+		index = len(rf.logs) // index that the command appears at in leader's log
 		rf.matchIndex[rf.me] = index
 		rf.nextIndex[rf.me] = index + 1
 		rf.persist() // 2C
 		// start agreement now
-		rf.broadcastHeartbeat()
+		// rf.broadcastHeartbeat()
 		rf.mu.Unlock()
 	}
 
@@ -171,24 +171,24 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 		for {
 			select {
 			case <-node.electionTimer.C:
-				node.mu.Lock()
+				rf.mu.Lock()
 				// electionTimer has elapsed, no need to call Stop()
 				ResetTimer(node.electionTimer, RandomDuration(ElectionTimeoutLower, ElectionTimeoutUpper))
-				if node.state == Follower {
-					node.convertTo(Candidate)
+				if rf.state == Follower {
+					rf.convertTo(Candidate)
 				} else {
-					node.startElection()
+					rf.startElection()
 				}
-				node.mu.Unlock()
+				rf.mu.Unlock()
 
-			case <-node.heartbeatTimer.C:
-				node.mu.Lock()
+			case <-rf.heartbeatTimer.C:
+				rf.mu.Lock()
 				if node.state == Leader {
 					Debug("HeartbeatTimer elapsed: Leader broadcasts Heartbeat \n")
-					node.broadcastHeartbeat()
+					rf.broadcastHeartbeat()
 					ResetTimer(node.heartbeatTimer, HeartbeatInterval)
 				}
-				node.mu.Unlock()
+				rf.mu.Unlock()
 			}
 		}
 	}(rf)
