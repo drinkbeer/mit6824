@@ -49,9 +49,10 @@ type RequestVoteReply struct {
 // RequestVote RPC handler.
 // Your code here (2A, 2B).
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
-	// 2A
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
+	defer rf.persist() // 2C execute before rf.mu.Unlock()
+	// 2A
 	if args.Term < rf.currentTerm || (args.Term == rf.currentTerm && rf.votedFor != -1 && rf.votedFor != args.CandidateId) {
 		reply.Term = rf.currentTerm
 		reply.VoteGranted = false
@@ -84,15 +85,17 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 // startElection starts to send RequestVote RPC to peers, and count the votes on conversion to candidate.
 func (rf *Raft) startElection() {
+	defer rf.persist() // 2C
+
 	// 2A
 	rf.currentTerm += 1
 
 	lastLogIndex := len(rf.logs) - 1
 	args := RequestVoteArgs{
-		Term:        rf.currentTerm,
-		CandidateId: rf.me,
+		Term:         rf.currentTerm,
+		CandidateId:  rf.me,
 		LastLogIndex: rf.getAbsoluteLogIndex(rf.lastApplied),
-		LastLogTerm: rf.logs[lastLogIndex].Term,
+		LastLogTerm:  rf.logs[lastLogIndex].Term,
 	}
 
 	// startElection is called on conversion to candidate, and election timer is reset before calling startElection.
@@ -121,6 +124,7 @@ func (rf *Raft) startElection() {
 					if reply.Term > rf.currentTerm {
 						rf.currentTerm = reply.Term
 						rf.convertTo(Follower)
+						rf.persist() // 2C
 					}
 				}
 				rf.mu.Unlock()

@@ -111,6 +111,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 		index = len(rf.logs) - 1 // index that the command appears at in leader's log
 		rf.matchIndex[rf.me] = index
 		rf.nextIndex[rf.me] = index + 1
+		rf.persist() // 2C
 		// start agreement now
 		rf.broadcastHeartbeat()
 		rf.mu.Unlock()

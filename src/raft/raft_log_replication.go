@@ -25,7 +25,7 @@ type AppendEntriesReply struct {
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-	defer rf.persist() // execute before rf.mu.Unlock()
+	defer rf.persist() // 2C execute before rf.mu.Unlock()
 	if args.Term < rf.currentTerm {
 		reply.Success = false
 		reply.Term = rf.currentTerm
@@ -218,6 +218,7 @@ func (rf *Raft) broadcastHeartbeat() {
 					if reply.Term > rf.currentTerm {
 						rf.currentTerm = reply.Term
 						rf.convertTo(Follower)
+						rf.persist() // execute before rf.mu.Unlock()
 					}
 					//else {
 					//	// leader and follower's term in PrevLogIndex is not match, decrease PrevLogIndex by one for next retry
