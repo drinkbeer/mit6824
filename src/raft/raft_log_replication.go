@@ -47,21 +47,6 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	ResetTimer(rf.electionTimer,
 		RandomDuration(ElectionTimeoutLower, ElectionTimeoutUpper))
 
-	//if args.PrevLogIndex <= rf.snapshottedIndex {
-	//	reply.Success = true
-	//
-	//	// sync log if needed
-	//	if args.PrevLogIndex+len(args.LogEntries) > rf.snapshottedIndex {
-	//		// if snapshottedIndex == prevLogIndex, all log entries should be added.
-	//		startIdx := rf.snapshottedIndex - args.PrevLogIndex
-	//		// only keep the last snapshotted one
-	//		rf.logs = rf.logs[:1]
-	//		rf.logs = append(rf.logs, args.LogEntries[startIdx:]...)
-	//	}
-	//
-	//	return
-	//}
-
 	// entries before args.PrevLogIndex might be unmatch
 	// return false and ask Leader to decrement PrevLogIndex
 	/*
@@ -74,9 +59,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	if absoluteLastLogIndex < args.PrevLogIndex {
 		reply.Success = false
 		reply.Term = rf.currentTerm
-		//// optimistically thinks receiver's log matches with Leader's as a subset
+		// optimistically thinks receiver's log matches with Leader's as a subset
 		reply.ConflictIndex = absoluteLastLogIndex + 1
-		//// no conflict term
+		// no conflict term
 		reply.ConflictTerm = -1
 		return
 	}
@@ -265,9 +250,7 @@ func (rf *Raft) setCommitIndex(commitIndex int) {
 				// do not forget to update lastApplied index
 				// this is another goroutine, so protect it with lock
 				rf.mu.Lock()
-				// if rf.lastApplied < msg.CommandIndex {
 				rf.lastApplied = msg.CommandIndex
-				// }
 				rf.mu.Unlock()
 			}
 		}(rf.lastApplied+1, entriesToApply)

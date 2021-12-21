@@ -104,7 +104,7 @@ func (rf *Raft) startElection() {
 	args := RequestVoteArgs{
 		Term:         rf.currentTerm,
 		CandidateId:  rf.me,
-		LastLogIndex: rf.lastApplied,
+		LastLogIndex: lastLogIndex,
 		LastLogTerm:  rf.logs[lastLogIndex].Term,
 	}
 
