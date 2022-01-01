@@ -20,6 +20,6 @@ replace labgob => ./src/labgob
 
 replace raft => ./src/raft
 
-replace kvraft => ./src/kvraft
+// replace kvraft => ./src/kvraft
 
 replace linearizability => ./src/linearizability
