@@ -9,9 +9,9 @@ package raft
 //
 
 import (
-	"github.com/drinkbeer/mit6824/labrpc"
 	"log"
 	"math/rand"
+	"mit6824/labrpc"
 	"runtime"
 	"sync"
 	"testing"

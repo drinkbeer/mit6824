@@ -2,14 +2,14 @@ package main
 
 import (
 	"bytes"
+	"fmt"
+	"mit6824/mapreduce"
 	"os"
 	"sort"
 	"strconv"
 	"strings"
 	"unicode"
 )
-import "fmt"
-import "mapreduce"
 
 // The mapping function is called once for each piece of the input.
 // In this framework, the key is the name of the file that is being processed,
@@ -46,7 +46,7 @@ func reduceF(key string, values []string) string {
 	buf.WriteRune(' ')
 	for i, document := range values {
 		buf.WriteString(document)
-		if (i != nDocument - 1) {
+		if i != nDocument-1 {
 			buf.WriteRune(',')
 		}
 	}

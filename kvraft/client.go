@@ -2,8 +2,8 @@ package raftkv
 
 import (
 	"crypto/rand"
-	"labrpc"
 	"math/big"
+	"mit6824/labrpc"
 )
 
 type Clerk struct {

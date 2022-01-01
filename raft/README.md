@@ -138,12 +138,12 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 ```
 
 #### Run Test
-`go test . -run 2A`
+`go test . -run 2A` or `go test ./raft -run 2A`
 
 ## Lab2B
 
 ---
-`go test . -run 2B` or `time go test . -run 2B`
+`go test . -run 2B` or `time go test . -run 2B` or `go test ./raft -run 2B`
 
 ## Lab2C
 
@@ -181,7 +181,7 @@ func (rf *Raft) readPersist(data []byte) {
 ```
 
 ---
-`go test . -run 2C`
+`go test . -run 2C` or `go test ./raft -run 2C`
 
 ## Reference
 1. [Lab2 Docs] http://nil.csail.mit.edu/6.824/2018/labs/lab-raft.html

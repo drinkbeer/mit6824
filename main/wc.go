@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"mapreduce"
+	"mit6824/mapreduce"
 	"os"
 	"strconv"
 	"strings"

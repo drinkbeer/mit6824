@@ -1,9 +1,9 @@
 package raftkv
 
 import (
-	"linearizability"
 	"log"
 	"math/rand"
+	"mit6824/linearizability"
 	"strconv"
 	"strings"
 	"sync"

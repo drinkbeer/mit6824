@@ -2,7 +2,7 @@ package raft
 
 import (
 	"bytes"
-	"github.com/drinkbeer/mit6824/labgob"
+	"mit6824/labgob"
 )
 
 // persist save Raft's persistent state to stable storage,

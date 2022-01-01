@@ -1,7 +1,7 @@
 package raftkv
 
 import (
-	"labrpc"
+	"mit6824/labrpc"
 	"os"
 	"testing"
 
@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"math/big"
 	"math/rand"
-	"raft"
+	"mit6824/raft"
 	"runtime"
 	"sync"
 	"sync/atomic"

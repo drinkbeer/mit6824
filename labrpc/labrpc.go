@@ -51,9 +51,9 @@ package labrpc
 
 import (
 	"bytes"
-	"labgob"
 	"log"
 	"math/rand"
+	"mit6824/labgob"
 	"reflect"
 	"strings"
 	"sync"

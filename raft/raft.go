@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/drinkbeer/mit6824/labrpc"
+	"mit6824/labrpc"
 )
 
 /*

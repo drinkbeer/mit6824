@@ -1,10 +1,10 @@
 package raftkv
 
 import (
-	"labgob"
-	"labrpc"
 	"log"
-	"raft"
+	"mit6824/labgob"
+	"mit6824/labrpc"
+	"mit6824/raft"
 	"sync"
 )
 
