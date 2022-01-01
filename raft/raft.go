@@ -1,9 +1,10 @@
 package raft
 
 import (
-	"labrpc"
 	"sync"
 	"time"
+
+	"github.com/drinkbeer/mit6824/labrpc"
 )
 
 /*
