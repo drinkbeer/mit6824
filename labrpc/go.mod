@@ -1,4 +1,4 @@
-module labrpc
+module github.com/drinkbeer/MIT-6.824-Distributed-Systems/labrpc
 
 go 1.16
 
