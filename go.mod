@@ -1,4 +1,4 @@
-module mit-6.824
+module src
 
 go 1.16
 

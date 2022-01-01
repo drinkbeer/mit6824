@@ -7,5 +7,5 @@
 (env/append-to-pathlist "GOPATH" (path-concat (env/get "HOME") "go"))
 (env/append-to-pathlist "PATH" (path-concat (env/get "GOPATH") "bin"))
 
-(env/append-to-pathlist "GOPATH" (path-concat (env/get "PKG_PATH") "src"))
+(env/append-to-pathlist "GOPATH" (env/get "PKG_PATH"))
 (env/append-to-pathlist "PATH" (path-concat (env/get "GOPATH") "bin"))
