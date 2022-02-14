@@ -1,5 +1,7 @@
 package raftkv
 
+import "log"
+
 const (
 	OK       = "OK"
 	ErrNoKey = "ErrNoKey"
@@ -15,6 +17,8 @@ type PutAppendArgs struct {
 	// You'll have to add definitions here.
 	// Field names must start with capital letters,
 	// otherwise RPC will break.
+	ClientId  int64
+	RequestId int
 }
 
 type PutAppendReply struct {
@@ -25,10 +29,21 @@ type PutAppendReply struct {
 type GetArgs struct {
 	Key string
 	// You'll have to add definitions here.
+	ClientId  int64
+	RequestId int
 }
 
 type GetReply struct {
 	WrongLeader bool
 	Err         Err
 	Value       string
+}
+
+const Debug = 0
+
+func DPrintf(format string, a ...interface{}) (n int, err error) {
+	if Debug > 0 {
+		log.Printf(format, a...)
+	}
+	return
 }
